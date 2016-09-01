@@ -3,7 +3,7 @@ import struct
 
 class GRFHeader:
     '''
-    A GRF header
+    A GRF Header
     ############
 
     The header portion of the GRF archive is the first 46 bytes. They are
@@ -93,7 +93,7 @@ class GRFHeader:
         elif encrypt_flag == self.ENCRYPTION_DENY:
             self.allow_encryption = False
         else:
-            raise ValueError('Invalid GRF Header: invalid incryption flag')
+            raise ValueError('Invalid GRF Header: invalid encryption flag')
 
         # get the position of the filelist
         offset, = struct.unpack('<I', self.data[self.OFFSET_SLICE])
