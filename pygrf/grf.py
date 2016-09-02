@@ -1,14 +1,48 @@
-import zlib
-import struct
+from struct import unpack
+from zlib import decompress
+from collections import namedtuple
 
 
+# the grf versions that are supported
+SUPPORTED_VERSIONS = [0x200]
+
+# where the grf header is located
+HEADER_OFFSET = 0
+HEADER_LENGTH = 46
+
+# which encodings to try before giving up on a filename
 ENCODINGS = ['euc_kr', 'johab', 'uhc', 'mskanji']
 
+FILE_HEADER_LENGTH = 17
 
-class GRFHeader:
-    '''
-    A GRF Header
-    ############
+# file flags
+FILE_IS_FILE = 1
+
+
+Header = namedtuple('GRFHeader', (
+    'allow_encryption', 'index_offset', 'file_count', 'version'
+))
+
+
+FileHeader = namedtuple('GRFFileHeader', (
+    'compressed_size', 'archived_size', 'real_size', 'flag', 'position'
+))
+
+
+def decode_name(name):
+    '''decode a name using multiple encodings'''
+    for encoding in ENCODINGS:
+        try:
+            return name.decode(encoding)
+        except UnicodeDecodeError as err:
+            pass
+    raise UnicodeError(name)
+
+
+def parse_header(stream):
+    '''parse the grf header
+
+    :param stream: a byte stream of the grf file
 
     The header portion of the GRF archive is the first 46 bytes. They are
     arranged as follows:
@@ -16,12 +50,14 @@ class GRFHeader:
     ======  ====  =======================================
     offset  size  purpose
     ======  ====  =======================================
-    0       15    A watermark that says 'Master of Magic'
-    15      15    An encryption flag
-    30      4     The offset where the file list is found
-    34      8     A count of the number of files
-    42      4     The version number
+    0       15    a watermark that says 'Master of Magic'
+    15      15    an encryption flag
+    30      4     the offset where the file list is found
+    34      8     the number of files in the archive
+    42      4     the archive version number
     ======  ====  =======================================
+
+    All integers are stored in little endian byte order.
 
     Master of Magic
     ===============
@@ -44,16 +80,15 @@ class GRFHeader:
     Offset
     ======
 
-    The offset is where in the file the list of files is found. The stored value
-    does not include the 46 byte header. This is stored in a little endian 32
-    bit unsigned integer.
+    The offset is where the file list is found. The stored value does not
+    incldue the 46 byte header, but the parsed value does.
 
     File Count
     ==========
 
-    The file count is stored in two different 32 bit unsigned integers. The
-    first value is subtracted from the second, and then 7 is taken away to get
-    the actual file count.
+    The file count is stored in two different integers. The first one is
+    subtracted from the second, and 7 is taken away to get the total number of
+    files stored in the archive.
 
     .. TODO:: figure out what these two different values actually mean
 
@@ -65,94 +100,105 @@ class GRFHeader:
     version number is ignored by this parser. Currently, the only supported
     version is `0x0200`.
     '''
-    SUPPORTED_VERSIONS = [0x0200]
+    ENCRYPTION_FLAGS = {bytes(range(15)): True, bytes([0] * 15): False}
 
-    HEADER_LENGTH = 46
-    HEADER_OFFSET = 0
+    WATERMARK = slice(0, 15)
+    ENCRYPTION = slice(15, 30)
+    OFFSET = slice(30, 34)
+    FILECOUNT = slice(34, 42)
+    VERSION = slice(42, 46)
 
-    WATERMARK = b'Master of Magic'
-    ENCRYPTION_ALLOW = bytes(range(15))
-    ENCRYPTION_DENY = bytes([0] * 15)
+    # read the full header data
+    stream.seek(HEADER_OFFSET)
+    data = stream.read(HEADER_LENGTH)
 
-    WATERMARK_SLICE = slice(0, 15)
-    ENCRYPTION_SLICE = slice(15, 30)
-    OFFSET_SLICE = slice(30, 34)
-    FILECOUNT_SLICE = slice(34, 42)
-    VERSION_SLICE = slice(42, 46)
+    # verify the watermark is valid
+    if not data[WATERMARK] == b'Master of Magic':
+        raise ValueError('Invalid GRF Header: missing Master of Magic')
 
-    def __init__(self, grf_file):
-        # read the full header data
-        grf_file.seek(self.HEADER_OFFSET)
-        self.data = grf_file.read(self.HEADER_LENGTH)
+    # verify the encryption flag is valid
+    if not data[ENCRYPTION] in ENCRYPTION_FLAGS:
+        raise ValueError('Invalid GRF Header: invalid encryption flag')
+    encryption = ENCRYPTION_FLAGS[data[ENCRYPTION]]
 
-        # verify the watermark is valid
-        watermark = self.data[self.WATERMARK_SLICE]
-        if not watermark == self.WATERMARK:
-            raise ValueError('Invalid GRF Header: missing Master of Magic')
+    # get the position of the file list
+    offset, = unpack('<I', data[OFFSET])
+    offset += HEADER_LENGTH
 
-        # determine encryption
-        encrypt_flag = self.data[self.ENCRYPTION_SLICE]
-        if encrypt_flag == self.ENCRYPTION_ALLOW:
-            self.allow_encryption = True
-        elif encrypt_flag == self.ENCRYPTION_DENY:
-            self.allow_encryption = False
-        else:
-            raise ValueError('Invalid GRF Header: invalid encryption flag')
+    # get the number of files
+    b, a = unpack('<II', data[FILECOUNT])
+    file_count = a - b - 7
+    if file_count < 0:
+        raise ValueError('Invalid GRF Header: invalid file count')
 
-        # get the position of the filelist
-        offset, = struct.unpack('<I', self.data[self.OFFSET_SLICE])
-        self.entry_point = self.HEADER_LENGTH + offset
+    # get the version
+    version, = unpack('<I', data[VERSION])
+    version &= 0xff00 # ignore minor version information
+    if not version in SUPPORTED_VERSIONS:
+        raise ValueError('Invalid GRF Header: unsupported version')
 
-        # get the number of files
-        b, a = struct.unpack('<II', self.data[self.FILECOUNT_SLICE])
-        self.file_count = a - b - 7
-        if self.file_count < 0:
-            raise ValueError('Invalid GRF Header: invalid file count')
-
-        # get the version
-        self.version, = struct.unpack('<I', self.data[self.VERSION_SLICE])
-        self.version &= 0xFF00 # ignore minor version information
-        if self.version not in self.SUPPORTED_VERSIONS:
-            raise ValueError('Invalid GRF File: unsupported version')
+    return Header(encryption, offset, file_count, version)
 
 
-class GRFFile:
+def parse_index(stream, header):
+    '''parse the list of files
+
+    :param stream: the byte stream of the grf file
+    :param header: the grf header information
+    :returns: a grf index
     '''
-    GRF File
-    ########
+    # seek to and read the size information
+    stream.seek(header.index_offset)
+    compressed_length, real_length = unpack('<II', stream.read(8))
 
-    The metadata about a file held inside a GRF archive. This data is stored
-    with the filename string followed by 17 additional bytes arranged in the
+    # read and decompress the index data
+    index_data = decompress(stream.read(compressed_length))
+
+    index = {}
+    for _ in range(header.file_count):
+        # pop the filename off the top
+        filename, index_data = index_data.split(b'\x00', 1)
+        filename = decode_name(filename)
+
+        # pop the header off the top
+        header = index_data[:FILE_HEADER_LENGTH]
+        index_data = index_data[FILE_HEADER_LENGTH:]
+
+        # append the file to the index
+        index[filename] = header
+
+    return index
+
+
+def parse_file_header(data):
+    '''parse file header
+
+    :param header_data: the raw header data to parse
+
+    The file header is made up of 17 bytes of information arranged in the
     following way:
 
     ======  ====  ===============
     offset  size  purpose
     ======  ====  ===============
-    0       4     compressed size
-    4       4     size in file
-    8       4     real size
+    0       12    sizes
     12      1     flags
     13      4     position
     ======  ====  ===============
 
     All integers are stored in little endian byte order.
 
-    Compressed Size
-    ===============
+    Sizes
+    =====
 
-    Files stored in the GRF archive are compressed. This is the size of the
-    compressed data.
+    There are three different sizes stored in this order:
 
-    Size in File
-    ============
-
-    Some files stored in the GRF archive are encrypted or otherwise manipulated.
-    This is the size of the data within the actual GRF file.
-
-    Real Size
-    =========
-
-    This is the size of the file after it has been decompressed.
+    compressed size
+        the size of the compressed file data
+    size in file
+        the size of the data stored in the archive itself
+    real size
+        the full, decompressed file size
 
     Flags
     =====
@@ -168,89 +214,44 @@ class GRFFile:
     0x4    set if only the first 0x14 bytes are encrypted
     =====  =================================================
 
+    .. TODO:: find files with flags other than 0x01
+
     Position
     ========
 
-    This is the offset at which the file is stored in the GRF archive. The
-    stored value does not include the 46 byte header, which will be appended.
+    This is the offset at which the file is stored in the archive. The stored
+    value does not include the 46 byte header. The parsed value does.
     '''
-    FILE_INFO_SIZE = 0x11
+    SIZES = slice(0, 12)
+    FLAG = 12
+    POSITION = slice(13, 17)
 
-    SIZE_SLICE = slice(0, 12)
-    FLAG_SLICE = 12 # not actually a slice because only one byte
-    POSITION_SLICE = slice(13, 17)
+    compressed, archived, real = unpack('<III', data[SIZES])
+    flag = data[FLAG]
+    position, = unpack('<I', data[POSITION])
 
-    # flags
-    IS_FILE = 0x01
-
-    def __init__(self, file_info):
-        # pop the filename off and store it
-        filename, file_info = file_info.split(b'\x00', 1)
-        self.filename = decode_name(filename)
-
-        # read size and position information
-        sizes = struct.unpack('<III', file_info[self.SIZE_SLICE])
-        self.compressed_size, self.archived_size, self.real_size = sizes
-        self.position, = struct.unpack('<I', file_info[self.POSITION_SLICE])
-
-        # read the flags
-        self.flags = file_info[self.FLAG_SLICE]
-
-    @property
-    def is_file(self):
-        return self.flags & self.IS_FILE == self.IS_FILE
-
-    @property
-    def is_dir(self):
-        return not self.is_file
+    return FileHeader(compressed, archived, real, flag, position)
 
 
-def decode_name(name):
-    for encoding in ENCODINGS:
-        try:
-            return name.decode(encoding)
-        except UnicodeDecodeError as err:
-            pass
-    raise UnicodeError(name)
+class GRFFile:
 
-
-def parse_file_list(grf_file, header):
-    '''parse the list of files
-
-    :param grf_file: the IO stream to read the list from
-    :param header: the GRF header with appropriate offset information
-    :returns: list of GRF Files
-    '''
-    # seek to and read size information
-    grf_file.seek(header.entry_point)
-    compressed_length, real_length = struct.unpack('<II', grf_file.read(8))
-
-    # read and decompress the file list data
-    file_list = grf_file.read(compressed_length)
-    file_list = zlib.decompress(file_list)
-
-    # parse each file
-    files = {}
-    for _ in range(header.file_count):
-        filename, _ = file_list.split(b'\x00', 1)
-        files[decode_name(filename)] = GRFFile(file_list)
-
-        # move ahead to the next file
-        size = len(filename) + GRFFile.FILE_INFO_SIZE + 1
-        file_list = file_list[size:]
-
-    return files
+    def __init__(self, header_data):
+        self.header = parse_file_header(header_data)
 
 
 class GRFArchive:
 
     def __init__(self, filename):
         self.file = open(filename, 'rb')
-        self.header = GRFHeader(self.file)
-        self.files = parse_file_list(self.file, self.header)
+        self.header = parse_header(self.file)
+        self.index = parse_index(self.file, self.header)
 
     def __enter__(self):
         return self
 
     def __exit__(self, *args):
         pass
+
+    def get(self, filename):
+        '''get a file from the archive'''
+        return GRFFile(self.index.get(filename))
