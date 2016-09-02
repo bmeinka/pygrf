@@ -3,14 +3,14 @@
         "compressed": 15,
         "archived": 16,
         "real": 7,
-        "position": 0,
+        "position": 46,
         "flag": 1
     },
     "data\\b.dat": {
         "compressed": 267,
         "archived": 268,
         "real": 256,
-        "position": 16,
+        "position": 62,
         "flag": 1
     }
 }

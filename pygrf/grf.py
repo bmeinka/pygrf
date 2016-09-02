@@ -1,3 +1,4 @@
+import os
 from struct import unpack
 from zlib import decompress
 from collections import namedtuple
@@ -230,14 +231,26 @@ def parse_file_header(data):
     compressed, archived, real = unpack('<III', data[SIZES])
     flag = data[FLAG]
     position, = unpack('<I', data[POSITION])
+    position += HEADER_LENGTH
 
     return FileHeader(compressed, archived, real, flag, position)
 
 
 class GRFFile:
 
-    def __init__(self, header_data):
+    def __init__(self, filename, stream, header_data):
+        '''fetch file from grf archive
+        
+        :param stream: the grf file stream
+        :param header_data: the header data for this file
+        '''
+        self.filename = filename
         self.header = parse_file_header(header_data)
+        # raise value error if flags trigger unsupported action
+
+        # seek to, read, and decompress file data
+        stream.seek(self.header.position)
+        self.data = decompress(stream.read(self.header.archived_size))
 
 
 class GRFArchive:
@@ -255,4 +268,14 @@ class GRFArchive:
 
     def get(self, filename):
         '''get a file from the archive'''
-        return GRFFile(self.index.get(filename))
+        return GRFFile(filename, self.file, self.index[filename])
+
+    def extract(self, filename, parent_dir=None):
+        grf_file = self.get(filename)
+        file_path = os.path.join(*filename.split('\\'))
+        if parent_dir:
+            file_path = os.path.join(parent_dir, file_path)
+        if not os.path.exists(os.path.dirname(file_path)):
+            os.makedirs(os.path.dirname(file_path))
+        with open(file_path, 'wb') as extracted_file:
+            extracted_file.write(grf_file.data)
