@@ -53,7 +53,6 @@ class TestFileHeader:
                 f = grf_file.get(name)
 
         assert f.header.archived_size == info['archived']
-        assert f.header.archived_size == info['archived']
         assert f.header.compressed_size == info['compressed']
         assert f.header.real_size == info['real']
         assert f.header.position == info['position']

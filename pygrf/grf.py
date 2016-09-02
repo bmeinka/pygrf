@@ -117,9 +117,10 @@ def parse_header(stream):
         raise ValueError('Invalid GRF Header: missing Master of Magic')
 
     # verify the encryption flag is valid
-    if not data[ENCRYPTION] in ENCRYPTION_FLAGS:
+    try:
+        encryption = ENCRYPTION_FLAGS[data[ENCRYPTION]]
+    except KeyError:
         raise ValueError('Invalid GRF Header: invalid encryption flag')
-    encryption = ENCRYPTION_FLAGS[data[ENCRYPTION]]
 
     # get the position of the file list
     offset, = unpack('<I', data[OFFSET])
