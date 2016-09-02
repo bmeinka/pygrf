@@ -2,6 +2,9 @@ import zlib
 import struct
 
 
+ENCODINGS = ['euc_kr', 'johab', 'uhc', 'mskanji']
+
+
 class GRFHeader:
     '''
     A GRF Header
@@ -183,7 +186,7 @@ class GRFFile:
     def __init__(self, file_info):
         # pop the filename off and store it
         filename, file_info = file_info.split(b'\x00', 1)
-        self.filename = filename.decode()
+        self.filename = decode_name(filename)
 
         # read size and position information
         sizes = struct.unpack('<III', file_info[self.SIZE_SLICE])
@@ -200,6 +203,15 @@ class GRFFile:
     @property
     def is_dir(self):
         return not self.is_file
+
+
+def decode_name(name):
+    for encoding in ENCODINGS:
+        try:
+            return name.decode(encoding)
+        except UnicodeDecodeError as err:
+            pass
+    raise UnicodeError(name)
 
 
 def parse_file_list(grf_file, header):
@@ -221,7 +233,7 @@ def parse_file_list(grf_file, header):
     files = {}
     for _ in range(header.file_count):
         filename, _ = file_list.split(b'\x00', 1)
-        files[filename.decode()] = GRFFile(file_list)
+        files[decode_name(filename)] = GRFFile(file_list)
 
         # move ahead to the next file
         size = len(filename) + GRFFile.FILE_INFO_SIZE + 1
