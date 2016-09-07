@@ -1,6 +1,10 @@
 import os
+from io import BytesIO
 from struct import unpack
 from zlib import decompress
+from functools import partial
+from itertools import takewhile
+from contextlib import suppress
 from collections import namedtuple
 
 
@@ -33,10 +37,8 @@ FileHeader = namedtuple('GRFFileHeader', (
 def decode_name(name):
     """decode a name using multiple encodings"""
     for encoding in ENCODINGS:
-        try:
+        with suppress(UnicodeDecodeError):
             return name.decode(encoding)
-        except UnicodeDecodeError as err:
-            pass
     raise UnicodeError(name)
 
 
@@ -51,7 +53,7 @@ def parse_header(stream):
     ======  ====  =======================================
     offset  size  purpose
     ======  ====  =======================================
-    0       15    a watermark that says 'Master of Magic'
+    0       15    "Master of Magic" signature
     15      15    an encryption flag
     30      4     the offset where the file list is found
     34      8     the number of files in the archive
@@ -103,7 +105,7 @@ def parse_header(stream):
     """
     ENCRYPTION_FLAGS = {bytes(range(15)): True, bytes([0] * 15): False}
 
-    WATERMARK = slice(0, 15)
+    SIGNATURE = slice(0, 15)
     ENCRYPTION = slice(15, 30)
     OFFSET = slice(30, 34)
     FILECOUNT = slice(34, 42)
@@ -113,8 +115,8 @@ def parse_header(stream):
     stream.seek(HEADER_OFFSET)
     data = stream.read(HEADER_LENGTH)
 
-    # verify the watermark is valid
-    if not data[WATERMARK] == b'Master of Magic':
+    # verify the signature is valid
+    if not data[SIGNATURE] == b'Master of Magic':
         raise ValueError('Invalid GRF Header: missing Master of Magic')
 
     # verify the encryption flag is valid
@@ -140,36 +142,6 @@ def parse_header(stream):
         raise ValueError('Invalid GRF Header: unsupported version')
 
     return Header(encryption, offset, file_count, version)
-
-
-def parse_index(stream, header):
-    """parse the list of files
-
-    :param stream: the byte stream of the grf file
-    :param header: the grf header information
-    :returns: a grf index
-    """
-    # seek to and read the size information
-    stream.seek(header.index_offset)
-    compressed_length, real_length = unpack('<II', stream.read(8))
-
-    # read and decompress the index data
-    index_data = decompress(stream.read(compressed_length))
-
-    index = {}
-    for _ in range(header.file_count):
-        # pop the filename off the top
-        filename, index_data = index_data.split(b'\x00', 1)
-        filename = decode_name(filename)
-
-        # pop the header off the top
-        header = index_data[:FILE_HEADER_LENGTH]
-        index_data = index_data[FILE_HEADER_LENGTH:]
-
-        # append the file to the index
-        index[filename] = header
-
-    return index
 
 
 def parse_file_header(data):
@@ -253,12 +225,112 @@ class GRFFile:
         self.data = decompress(stream.read(self.header.archived_size))
 
 
+class Index:
+    """
+    GRF Index
+    =========
+
+    The index of the GRF archive is stored in a zlib compressed blob at the
+    offset found in the header. The first four bytes are the compressed size of
+    the index, followed by four bytes for the real size. These are 32 bit
+    unsigned integers stored in little endian byte order. After the first eight
+    bytes begins the compressed data.
+
+    The decompressed data is a simple series of filenames followed by the file
+    header. The filenames are simple null-terminated C strings. The file header
+    is the next 17 bytes.
+    """
+
+    def __init__(self, stream, header):
+        """create an index for the grf archive
+
+        :param stream: the byte stream of the entire grf file
+        :param header: the grf header information
+        """
+        # decompress the real file list data
+        stream.seek(header.index_offset)
+        compressed_length, real_length = unpack('<II', stream.read(8))
+        self.data = BytesIO(decompress(stream.read(compressed_length)))
+
+        self.file_count = header.file_count
+        self.files = {}
+
+    def __getitem__(self, filename):
+        # if the file is already indexed, return it
+        with suppress(KeyError):
+            return self.files[filename]
+
+        # parse more files until the desired file is found
+        while True:
+            try:
+                next_file, header = self._pop()
+            except StopIteration:
+                break
+            if next_file == filename:
+                return header
+
+        # raise a key error if the file cannot be found
+        raise KeyError()
+
+    def __contains__(self, filename):
+        try:
+            self[filename]
+        except KeyError:
+            return False
+        return True
+
+    def __len__(self):
+        return self.file_count
+
+    def __iter__(self):
+        self.files_iterator = iter(self.files.items())
+        return self
+
+    def __next__(self):
+        # get the next already parsed file
+        with suppress(StopIteration):
+            return next(self.files_iterator)
+
+        # pop files until the end is reached
+        # _pop() will raise a StopIteration on its own
+        return self._pop()
+
+    def _pop_filename(self):
+        """pop the next filename from the data stream"""
+        # read bytes until a null terminator or EOF is found
+        read_name = iter(partial(self.data.read, 1), b'\x00')
+        read_name = takewhile(lambda c: c != b'', read_name)
+        return b''.join(read_name)
+
+    def _pop(self):
+        """pop the next filename and header
+
+        This will read the next filename and header, store them inside the
+        known files dictionary, and return both parts
+
+        :returns: filename, header
+        :raises StopIteration: no more data to parse
+        """
+        # pop the filename. if the filename is empty, EOF has been reached
+        filename = self._pop_filename()
+        if filename == b'':
+            raise StopIteration
+        filename = decode_name(filename)
+
+        # pop the header data
+        header = self.data.read(FILE_HEADER_LENGTH)
+
+        # add the file to the index and return it
+        self.files[filename] = header
+        return filename, header
+
+
 class GRF:
 
     def __init__(self, stream):
         self.stream = stream
         self.header = parse_header(self.stream)
-        self.index = parse_index(self.stream, self.header)
+        self.index = Index(self.stream, self.header)
 
     def __enter__(self):
         return self

@@ -20,7 +20,7 @@ class TestHeader:
             assert header.version == info['version']
 
     @pytest.mark.parametrize('filename', (
-        'invalid_watermark.grf', 'invalid_encryption.grf',
+        'invalid_signature.grf', 'invalid_encryption.grf',
         'invalid_version.grf', 'invalid_filecount.grf'
     ))
     def test_raise_value_error_bad_header(self, data_files, filename):
@@ -42,6 +42,33 @@ class TestIndex:
         with open_grf(data_files[filename]) as grf_file:
             for f in files:
                 assert f in grf_file.index
+
+    def test_index_raise_error_file_not_found(self, data_files):
+        grf = open_grf(data_files['ab.grf'])
+        with pytest.raises(KeyError):
+            grf.index['invalid file name']
+
+    def test_index_can_iterate(self, data_files):
+        files = ['data\\a.txt', 'data\\b.dat']
+        grf = open_grf(data_files['ab.grf'])
+        for name, header in grf.index:
+            assert name in files
+
+    @pytest.mark.parametrize('filename, count', (
+        ('ab.grf', 2), ('a.grf', 1)
+    ))
+    def test_index_iterates_all_files(self, data_files, filename, count):
+        counter = 0
+        grf = open_grf(data_files[filename])
+        for name, header in grf.index:
+            counter += 1
+        assert counter == count
+
+    def test_index_iterates_twice(self, data_files):
+        grf = open_grf(data_files['ab.grf'])
+        first = {f: h for f, h in grf.index}
+        second = {f: h for f, h in grf.index}
+        assert first == second
 
 
 class TestFileHeader:
