@@ -1,13 +1,9 @@
-import os
 from . import grf
 
 
-def open(filename):
-    _, ext = os.path.splitext(filename)
-    if ext == '.grf':
-        return open_grf(filename)
-    raise ValueError('Unsupported Filetype')
+def open_grf(filename: str) -> grf.GRF:
+    """open a GRF archive
 
-
-def open_grf(filename):
-    return grf.GRFArchive(filename)
+    :param filename: the path to the grf archive file
+    """
+    return grf.GRF(open(filename, 'rb'))

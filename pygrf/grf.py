@@ -31,7 +31,7 @@ FileHeader = namedtuple('GRFFileHeader', (
 
 
 def decode_name(name):
-    '''decode a name using multiple encodings'''
+    """decode a name using multiple encodings"""
     for encoding in ENCODINGS:
         try:
             return name.decode(encoding)
@@ -41,7 +41,7 @@ def decode_name(name):
 
 
 def parse_header(stream):
-    '''parse the grf header
+    """parse the grf header
 
     :param stream: a byte stream of the grf file
 
@@ -100,7 +100,7 @@ def parse_header(stream):
     version number and the second byte is the minor version number. The minor
     version number is ignored by this parser. Currently, the only supported
     version is `0x0200`.
-    '''
+    """
     ENCRYPTION_FLAGS = {bytes(range(15)): True, bytes([0] * 15): False}
 
     WATERMARK = slice(0, 15)
@@ -135,20 +135,20 @@ def parse_header(stream):
 
     # get the version
     version, = unpack('<I', data[VERSION])
-    version &= 0xff00 # ignore minor version information
-    if not version in SUPPORTED_VERSIONS:
+    version &= 0xff00  # ignore minor version information
+    if version not in SUPPORTED_VERSIONS:
         raise ValueError('Invalid GRF Header: unsupported version')
 
     return Header(encryption, offset, file_count, version)
 
 
 def parse_index(stream, header):
-    '''parse the list of files
+    """parse the list of files
 
     :param stream: the byte stream of the grf file
     :param header: the grf header information
     :returns: a grf index
-    '''
+    """
     # seek to and read the size information
     stream.seek(header.index_offset)
     compressed_length, real_length = unpack('<II', stream.read(8))
@@ -173,7 +173,7 @@ def parse_index(stream, header):
 
 
 def parse_file_header(data):
-    '''parse file header
+    """parse file header
 
     :param header_data: the raw header data to parse
 
@@ -223,7 +223,7 @@ def parse_file_header(data):
 
     This is the offset at which the file is stored in the archive. The stored
     value does not include the 46 byte header. The parsed value does.
-    '''
+    """
     SIZES = slice(0, 12)
     FLAG = 12
     POSITION = slice(13, 17)
@@ -239,11 +239,11 @@ def parse_file_header(data):
 class GRFFile:
 
     def __init__(self, filename, stream, header_data):
-        '''fetch file from grf archive
-        
+        """fetch file from grf archive
+
         :param stream: the grf file stream
         :param header_data: the header data for this file
-        '''
+        """
         self.filename = filename
         self.header = parse_file_header(header_data)
         # raise value error if flags trigger unsupported action
@@ -253,12 +253,12 @@ class GRFFile:
         self.data = decompress(stream.read(self.header.archived_size))
 
 
-class GRFArchive:
+class GRF:
 
-    def __init__(self, filename):
-        self.file = open(filename, 'rb')
-        self.header = parse_header(self.file)
-        self.index = parse_index(self.file, self.header)
+    def __init__(self, stream):
+        self.stream = stream
+        self.header = parse_header(self.stream)
+        self.index = parse_index(self.stream, self.header)
 
     def __enter__(self):
         return self
@@ -267,8 +267,8 @@ class GRFArchive:
         pass
 
     def get(self, filename):
-        '''get a file from the archive'''
-        return GRFFile(filename, self.file, self.index[filename])
+        """get a file from the archive"""
+        return GRFFile(filename, self.stream, self.index[filename])
 
     def extract(self, filename, parent_dir=None):
         grf_file = self.get(filename)

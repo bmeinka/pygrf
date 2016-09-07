@@ -1,1 +1,1 @@
-from .api import open, open_grf
+from .api import open_grf
