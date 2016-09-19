@@ -1,0 +1,4 @@
+palette/몸/마법사_여_4.pal
+sprite/아이템/깎쮢쒸.act
+texture/유저인터페이스/cardbmp/티억넠카드.bmp
+fb

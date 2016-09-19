@@ -1,12 +1,12 @@
 {
-    "data\\a.txt": {
+    "a.txt": {
         "compressed": 15,
         "archived": 16,
         "real": 7,
         "position": 46,
         "flag": 1
     },
-    "data\\b.dat": {
+    "b.dat": {
         "compressed": 267,
         "archived": 268,
         "real": 256,

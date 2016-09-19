@@ -36,10 +36,30 @@ FileHeader = namedtuple('GRFFileHeader', (
 
 def decode_name(name):
     """decode a name using multiple encodings"""
+    # try with each known encoding
     for encoding in ENCODINGS:
         with suppress(UnicodeDecodeError):
             return name.decode(encoding)
-    raise UnicodeError(name)
+    # upon failure, replace failed characters with their hex representation
+    name = name.decode(errors='backslashreplace')
+    name = name.replace('\\x', '')
+    return name
+
+
+def parse_name(name):
+    """parse the raw filename data into a usable filename"""
+    # split the name into its path parts
+    path = name.split(b'\\')
+
+    # remove from the beginning
+    if path[0] == b'data':
+        path.pop(0)
+
+    # decode each part
+    path = [decode_name(part) for part in path]
+
+    # rejoin the path with appropriate path separators
+    return os.path.join(*path)
 
 
 def parse_header(stream):
@@ -315,7 +335,9 @@ class Index:
         filename = self._pop_filename()
         if filename == b'':
             raise StopIteration
-        filename = decode_name(filename)
+
+        # parse the filename
+        filename = parse_name(filename)
 
         # pop the header data
         header = self.data.read(FILE_HEADER_LENGTH)
