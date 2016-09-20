@@ -242,7 +242,10 @@ class GRFFile:
 
         # seek to, read, and decompress file data
         stream.seek(self.header.position)
-        self.data = decompress(stream.read(self.header.archived_size))
+        if self.header.real_size == 0:
+            self.data = b''
+        else:
+            self.data = decompress(stream.read(self.header.archived_size))
 
 
 class Index:

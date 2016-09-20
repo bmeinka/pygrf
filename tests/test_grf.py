@@ -111,6 +111,14 @@ class TestFile:
             f = grf_file.get(filename)
             assert f.data == expected
 
+    def test_empty_file(self, data_files):
+        expected = b''
+        # encoding.grf contains only empty files
+        grf = open_grf(data_files['encoding.grf'])
+        filename, _ = next(iter(grf.index))
+        f = grf.get(filename)
+        assert f.data == expected
+
     def test_file_extracts(self, data_files, tmpdir):
         expected_path = os.path.join(tmpdir.strpath, 'a.txt')
         with open_grf(data_files['ab.grf']) as grf_file:
