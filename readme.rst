@@ -20,18 +20,15 @@ The API isn't complete, but I can start working it out here.
 Entry Points
 ------------
 
-pygrf.open(filename, filetype=None)
-    open a file of the given filetype. If no type is provided, it will be
-    figured out
 pygrf.open_grf(filename)
     open a grf archive, returning the handler
 
 GRF Archive
 -----------
 
-archive.get(filename)
-    retrieve the bytes of the given file
-archive.extract(filename, dest='')
+GRF.open(filename)
+    open the given filename, returning a streamable object
+GRF.extract(filename, dest='')
     extract the given file to the given destination directory
-archive.close()
-    close the archive (should be handled with a context)
+GRF.close()
+    close teh archive
