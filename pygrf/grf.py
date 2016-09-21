@@ -227,7 +227,7 @@ def parse_file_header(data):
     return FileHeader(compressed, archived, real, flag, position)
 
 
-class GRFFile:
+class GRFFile(BytesIO):
 
     def __init__(self, filename, header_data, stream):
         """fetch file from grf archive
@@ -245,6 +245,7 @@ class GRFFile:
             self.data = b''
         else:
             self.data = decompress(stream.read(self.header.archived_size))
+        super().__init__(self.data)
 
 
 class Index:

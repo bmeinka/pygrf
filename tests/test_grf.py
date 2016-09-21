@@ -156,6 +156,14 @@ class TestFile:
 
         assert f.data == expected
 
+    def test_file_can_seek_and_read(self, data_files):
+        grf = open_grf(data_files['ab.grf'])
+        f = grf.open('a.txt')
+
+        assert f.read() == f.data
+        assert f.seek(0) == 0
+        assert f.read(2) == f.data[:2]
+
     def test_empty_file(self, data_files):
         expected = b''
 
