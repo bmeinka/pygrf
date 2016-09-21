@@ -7,7 +7,6 @@ from itertools import takewhile
 from contextlib import suppress
 from collections import namedtuple
 
-
 # the grf versions that are supported
 SUPPORTED_VERSIONS = [0x200]
 
@@ -230,17 +229,17 @@ def parse_file_header(data):
 
 class GRFFile:
 
-    def __init__(self, filename, stream, header_data):
+    def __init__(self, filename, header_data, stream):
         """fetch file from grf archive
 
-        :param stream: the grf file stream
+        :param filename: the filename of the file
         :param header_data: the header data for this file
+        :param stream: the grf data stream
         """
         self.filename = filename
         self.header = parse_file_header(header_data)
-        # raise value error if flags trigger unsupported action
 
-        # seek to, read, and decompress file data
+        # seek to, read and decompress file data
         stream.seek(self.header.position)
         if self.header.real_size == 0:
             self.data = b''
@@ -361,14 +360,30 @@ class GRF:
         return self
 
     def __exit__(self, *args):
-        pass
+        self.close()
 
-    def get(self, filename):
-        """get a file from the archive"""
-        return GRFFile(filename, self.stream, self.index[filename])
+    def __iter__(self):
+        self.index_iter = iter(self.index)
+        return self
+
+    def __next__(self):
+        # pop the next file in the index and open it by name
+        filename, header = next(self.index_iter)
+        return self.open(filename)
+
+    def __len__(self):
+        return self.header.file_count
+
+    def open(self, filename):
+        """open a file from the archive"""
+        try:
+            header = self.index[filename]
+        except KeyError:
+            raise FileNotFoundError(filename)
+        return GRFFile(filename, header, self.stream)
 
     def extract(self, filename, parent_dir=None):
-        grf_file = self.get(filename)
+        grf_file = self.open(filename)
         file_path = os.path.join(*filename.split('\\'))
         if parent_dir:
             file_path = os.path.join(parent_dir, file_path)
@@ -376,3 +391,6 @@ class GRF:
             os.makedirs(os.path.dirname(file_path))
         with open(file_path, 'wb') as extracted_file:
             extracted_file.write(grf_file.data)
+
+    def close(self):
+        self.stream.close()

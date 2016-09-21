@@ -3,6 +3,7 @@ import json
 import pytest
 import filecmp
 from pygrf import open_grf
+from pygrf.grf import GRF
 
 
 class TestHeader:
@@ -81,43 +82,94 @@ class TestIndex:
 class TestFileHeader:
 
     def test_header_has_correct_data(self, data_files):
-        with open(data_files['file_info.json']) as info_file:
-            file_info = json.load(info_file)
-        with open_grf(data_files['ab.grf']) as grf_file:
-            for name, size_info in file_info.items():
-                info = file_info[name]
-                f = grf_file.get(name)
+        info = json.load(open(data_files['file_info.json']))
 
-        assert f.header.archived_size == info['archived']
-        assert f.header.compressed_size == info['compressed']
-        assert f.header.real_size == info['real']
-        assert f.header.position == info['position']
-        assert f.header.flag == info['flag']
+        grf = open_grf(data_files['ab.grf'])
+        for name, size in info.items():
+            f = grf.open(name)
+
+            assert f.header.archived_size == info[name]['archived']
+            assert f.header.compressed_size == info[name]['compressed']
+            assert f.header.real_size == info[name]['real']
+            assert f.header.flag == info[name]['flag']
+
+
+class TestContext:
+
+    def test_close_closes_source_file(self, data_files):
+        source = open(data_files['ab.grf'], 'rb')
+        grf = GRF(source)
+
+        grf.close()
+
+        assert source.closed
+
+    def test_context_closes(self, data_files):
+        source = open(data_files['ab.grf'], 'rb')
+
+        with GRF(source) as grf:
+            pass
+
+        assert source.closed
+
+
+class TestIteration:
+
+    @pytest.mark.parametrize('name, length', (
+        ('a.grf', 1), ('ab.grf', 2)
+    ))
+    def test_archive_has_correct_length(self, data_files, name, length):
+        grf = open_grf(data_files[name])
+
+        assert len(grf) == length
+
+    @pytest.mark.parametrize('name', ('a.grf', 'ab.grf'))
+    def test_iterator_has_correct_length(self, data_files, name):
+        grf = open_grf(data_files[name])
+
+        assert len(grf) == len(list(iter(grf)))
+
+    def test_iterate_over_files(self, data_files):
+        filenames = ['a.txt', 'b.dat']
+
+        grf = open_grf(data_files['ab.grf'])
+
+        for f in grf:
+            assert f.filename in filenames
 
 
 class TestFile:
 
     @pytest.mark.parametrize('filename', ('a.txt', 'b.dat'))
     def test_file_has_filename(self, data_files, filename):
-        with open_grf(data_files['ab.grf']) as grf_file:
-            f = grf_file.get(filename)
-            assert f.filename == filename
+        grf = open_grf(data_files['ab.grf'])
+        f = grf.open(filename)
+
+        assert f.filename == filename
 
     @pytest.mark.parametrize('filename', ('a.txt', 'b.dat'))
     def test_file_has_correct_data(self, data_files, filename):
-        with open(data_files[filename], 'rb') as f:
-            expected = f.read()
-        with open_grf(data_files['ab.grf']) as grf_file:
-            f = grf_file.get(filename)
-            assert f.data == expected
+        expected = open(data_files[filename], 'rb').read()
+
+        grf = open_grf(data_files['ab.grf'])
+        f = grf.open(filename)
+
+        assert f.data == expected
 
     def test_empty_file(self, data_files):
         expected = b''
+
         # encoding.grf contains only empty files
         grf = open_grf(data_files['encoding.grf'])
         filename, _ = next(iter(grf.index))
-        f = grf.get(filename)
+        f = grf.open(filename)
+
         assert f.data == expected
+
+    def test_open_missing_file_raises_file_not_found(self, data_files):
+        grf = open_grf(data_files['ab.grf'])
+        with pytest.raises(FileNotFoundError):
+            grf.open('invalid filename')
 
     def test_file_extracts(self, data_files, tmpdir):
         expected_path = os.path.join(tmpdir.strpath, 'a.txt')
