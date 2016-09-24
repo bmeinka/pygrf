@@ -53,14 +53,11 @@ def parse_name(name):
     # split the name into its path parts
     path = name.split(b'\\')
 
-    # remove from the beginning
+    # remove 'data' from the beginning
     if path[0] == b'data':
         path.pop(0)
 
-    # decode each part
     path = [decode_name(part) for part in path]
-
-    # rejoin the path with appropriate path separators
     return os.path.join(*path)
 
 
@@ -269,90 +266,62 @@ class Index:
     - a null-terminated C string containing the filename
     - a 17 byte file header
     """
-
     def __init__(self, stream, header):
         """create an index for the grf archive
 
-        :param stream: the byte stream of the entire grf file
-        :param header: the grf header information
+        :param stream: the byte stream of the grf file
+        :param header: the grf header
         """
-        # decompress the real file list data
+        # decompress the raw file list
         stream.seek(header.index_offset)
         compressed_length, real_length = struct.unpack('<II', stream.read(8))
         self.data = io.BytesIO(zlib.decompress(stream.read(compressed_length)))
 
-        self.file_count = header.file_count
-        self.files = {}
+        # cache the filenames and headers as they are indexed
+        self.indexed = {}
 
     def __getitem__(self, filename):
+        """get the header for the given filename"""
         # if the file is already indexed, return it
         with contextlib.suppress(KeyError):
-            return self.files[filename]
+            return self.indexed[filename]
 
         # parse more files until the desired file is found
         while True:
             try:
-                next_file, header = self._pop()
+                next_file = self.parse_next()
             except StopIteration:
                 break
             if next_file == filename:
-                return header
+                return self.indexed[filename]
 
-        # raise a key error if the file cannot be found
-        raise KeyError()
-
-    def __contains__(self, filename):
-        try:
-            self[filename]
-        except KeyError:
-            return False
-        return True
-
-    def __len__(self):
-        return self.file_count
+        # the file wasn't found yet
+        raise KeyError
 
     def __iter__(self):
-        self.files_iterator = iter(self.files.items())
-        return self
+        """all the filenames in the index"""
+        yield from self.indexed
+        while True:
+            # self.parse_next will raise StopIteration
+            yield self.parse_next()
 
-    def __next__(self):
-        # get the next already parsed file
-        with contextlib.suppress(StopIteration):
-            return next(self.files_iterator)
-
-        # pop files until the end is reached
-        # _pop() will raise a StopIteration on its own
-        return self._pop()
-
-    def _pop_filename(self):
-        """pop the next filename from the data stream"""
+    def parse_next(self):
+        """parse the next filename and store its header"""
         # read bytes until a null terminator or EOF is found
         read_name = iter(functools.partial(self.data.read, 1), b'\x00')
         read_name = itertools.takewhile(lambda c: c != b'', read_name)
-        return b''.join(read_name)
+        filename = b''.join(read_name)
 
-    def _pop(self):
-        """pop the next filename and header
-
-        This will read the next filename and header, store them, and return both parts.
-
-        :returns: filename, header
-        :raises StopIteration: no more data to parse
-        """
-        # pop the filename. if the filename is empty, EOF has been reached
-        filename = self._pop_filename()
+        # if EOF was reached, stop looking for more files
         if filename == b'':
             raise StopIteration
 
-        # parse the filename
         filename = parse_name(filename)
-
-        # pop the header data
         header = self.data.read(FILE_HEADER_LENGTH)
 
-        # add the file to the index and return it
-        self.files[filename] = header
-        return filename, header
+        # index the file header and return the filename
+        self.indexed[filename] = header
+        return filename
 
 
 class GRF:
@@ -369,15 +338,12 @@ class GRF:
         self.close()
 
     def __iter__(self):
-        self.index_iter = iter(self.index)
-        return self
-
-    def __next__(self):
-        # pop the next file in the index and open it by name
-        filename, header = next(self.index_iter)
-        return self.open(filename)
+        """iterate over files in the archive"""
+        for filename in self.index:
+            yield self.open(filename)
 
     def __len__(self):
+        """the number of files in the grf archive"""
         return self.header.file_count
 
     @property
@@ -392,8 +358,7 @@ class GRF:
 
     def files(self):
         """all the names of the files contained in the archive"""
-        for name, header in self.index:
-            yield name
+        yield from self.index
 
     def open(self, filename):
         """open a file in the archive"""
