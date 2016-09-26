@@ -7,6 +7,7 @@ import os
 import struct
 import zlib
 
+from .filetypes import FILETYPES
 from .exceptions import InvalidGRFError
 
 
@@ -366,7 +367,12 @@ class GRF:
             header = self.index[filename]
         except KeyError:
             raise FileNotFoundError(filename)
-        return GRFFile(filename, header, self.stream)
+        opened_file = GRFFile(filename, header, self.stream)
+        # open the file based on extension
+        _, extension = os.path.splitext(filename)
+        if extension in FILETYPES:
+            return FILETYPES[extension](opened_file)
+        return opened_file
 
     def extract(self, filename, parent_dir=None):
         """extract a file from the archive to the filesystem

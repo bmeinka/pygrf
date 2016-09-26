@@ -1,5 +1,5 @@
-from .api import open_grf
-from .exceptions import PyGRFError, InvalidGRFError
+from .api import open_grf, open_gat
+from .exceptions import PyGRFError, InvalidGRFError, InvalidGATError
 
 
-__all__ = [open_grf, PyGRFError, InvalidGRFError]
+__all__ = [open_grf, open_gat, PyGRFError, InvalidGRFError, InvalidGATError]

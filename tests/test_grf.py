@@ -7,6 +7,8 @@ from pygrf import open_grf
 from pygrf import InvalidGRFError
 from pygrf.grf import GRF
 
+from pygrf.gat import GAT
+
 
 @pytest.mark.parametrize('name, expected', (('a.grf', 1), ('ab.grf', 2)))
 def test_grf_has_correct_length(data_files, name, expected):
@@ -133,6 +135,13 @@ def test_grf_open_empty_file(data_files):
     name = list(grf.files()).pop()
     opened_file = grf.open(name)
     assert opened_file.data == expected
+
+
+@pytest.mark.parametrize('name, filetype', (('a.gat', GAT),))
+def test_grf_open_known_filetypes(data_files, name, filetype):
+    grf = open_grf(data_files['filetypes.grf'])
+    opened_file = grf.open(name)
+    assert isinstance(opened_file, filetype)
 
 
 def tset_grf_open_raises_file_not_found_error(data_files):

@@ -4,3 +4,7 @@ class PyGRFError(Exception):
 
 class InvalidGRFError(PyGRFError):
     pass
+
+
+class InvalidGATError(PyGRFError):
+    pass
