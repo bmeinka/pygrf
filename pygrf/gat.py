@@ -141,7 +141,7 @@ class GAT(io.BytesIO):
         if x >= self.width or y >= self.height or x < 0 or y < 0:
             raise IndexError
         if not (x, y) in self.tiles:
-            tile_data = self.tile_data[y + x * self.width]
+            tile_data = self.tile_data[x + y * self.width]
             self.tiles[(x, y)] = parse_tile(tile_data)
         return self.tiles[(x, y)]
 

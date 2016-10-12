@@ -43,7 +43,7 @@ def test_gat_data_matches_source_data(data_files, name):
     assert gat.read() == source.read()
 
 
-@pytest.mark.parametrize('x, y, expected', ((0, 0, 0), (1, 1, 1), (2, 2, 2)))
+@pytest.mark.parametrize('x, y, expected', ((0, 0, 0), (1, 0, 1), (1, 1, 1), (2, 2, 2)))
 def test_gat_tile_has_correct_type(data_files, x, y, expected):
     gat = open_gat(data_files['a.gat'])
     tile = gat[x, y]
