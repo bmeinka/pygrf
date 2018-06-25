@@ -47,7 +47,7 @@ def parse_header(stream):
 
 def split_tiles(stream):
     """split the list of tiles into individual tiles
-    
+
     :param stream: the source stream to read from
     :returns: a list of 20-byte chunks
     """

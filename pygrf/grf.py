@@ -393,8 +393,9 @@ class GRF:
             os.makedirs(os.path.dirname(path))
 
         # create the file and write the data
+        grf_file.seek(0)
         with open(path, 'wb') as extracted_file:
-            extracted_file.write(grf_file.data)
+            extracted_file.write(grf_file.read())
 
     def close(self):
         """close the archive"""
