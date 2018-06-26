@@ -2,11 +2,9 @@ import filecmp
 import io
 import os
 import pytest
-
 from pygrf import open_grf
-from pygrf import InvalidGRFError
+from pygrf import GRFParseError
 from pygrf.grf import GRF
-
 from pygrf.gat import GAT
 
 
@@ -34,7 +32,7 @@ def test_grf_has_correct_encryption(data_files, name, expected):
     'invalid_filecount.grf'
 ))
 def test_grf_raises_invalid_grf_error(data_files, name):
-    with pytest.raises(InvalidGRFError):
+    with pytest.raises(GRFParseError):
         open_grf(data_files[name])
 
 

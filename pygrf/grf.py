@@ -6,9 +6,8 @@ import itertools
 import os
 import struct
 import zlib
-
 from .filetypes import FILETYPES
-from .exceptions import InvalidGRFError
+from .exceptions import GRFParseError
 
 
 # the grf versions that are supported
@@ -133,13 +132,13 @@ def parse_header(stream):
 
     # verify the signature is valid
     if not data[SIGNATURE] == b'Master of Magic':
-        raise InvalidGRFError('missing signature')
+        raise GRFParseError('missing signature')
 
     # verify the encryption flag is valid
     try:
         encryption = ENCRYPTION_FLAGS[data[ENCRYPTION]]
     except KeyError:
-        raise InvalidGRFError('invalid encryption flag')
+        raise GRFParseError('invalid encryption flag')
 
     # get the position of the file list
     offset, = struct.unpack('<I', data[OFFSET])
@@ -149,13 +148,13 @@ def parse_header(stream):
     b, a = struct.unpack('<II', data[FILECOUNT])
     file_count = a - b - 7
     if file_count < 0:
-        raise InvalidGRFError('invalid file count')
+        raise GRFParseError('invalid file count')
 
     # get the version
     version, = struct.unpack('<I', data[VERSION])
     version &= 0xff00  # ignore minor version information
     if version not in SUPPORTED_VERSIONS:
-        raise InvalidGRFError('unsupported version')
+        raise GRFParseError('unsupported version')
 
     return Header(encryption, offset, file_count, version)
 

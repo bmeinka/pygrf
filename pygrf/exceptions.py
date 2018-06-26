@@ -1,10 +1,3 @@
-class PyGRFError(Exception):
-    pass
-
-
-class InvalidGRFError(PyGRFError):
-    pass
-
-
-class InvalidGATError(PyGRFError):
-    pass
+class PyGRFError(Exception): pass
+class GRFParseError(PyGRFError): pass
+class FileParseError(PyGRFError): pass

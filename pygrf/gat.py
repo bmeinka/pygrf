@@ -2,8 +2,7 @@ import collections
 import functools
 import io
 import struct
-
-from .exceptions import InvalidGATError
+from .exceptions import FileParseError
 
 
 HEADER_LENGTH = 14
@@ -39,7 +38,7 @@ def parse_header(stream):
 
     # verify the signature
     if header_data[SIGNATURE] != b'GRAT\x01\x02':
-        raise InvalidGATError('invalid signature')
+        raise FileParseError('invalid signature')
 
     # unpack the sizes and return them
     return Header(*struct.unpack('<II', header_data[SIZE]))
@@ -126,10 +125,10 @@ class GAT(io.BytesIO):
 
         # make sure the number of tiles is correct
         if len(self.tile_data) != (self.width * self.height):
-            raise InvalidGATError('invalid tile count')
+            raise FileParseError('invalid tile count')
         # make sure the last tile has a correct length
         if len(self.tile_data[-1]) != TILE_LENGTH:
-            raise InvalidGATError('invalid tile length')
+            raise FileParseError('invalid tile length')
         self.tiles = {}
 
         # reset the stream to 0, as if the stream was just opened

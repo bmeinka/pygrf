@@ -2,7 +2,7 @@ import io
 import pytest
 
 from pygrf import open_gat
-from pygrf import InvalidGATError
+from pygrf import FileParseError
 
 
 @pytest.mark.parametrize('name, expected', (('a.gat', 10), ('b.gat', 100)))
@@ -27,7 +27,7 @@ def test_gat_has_correct_size(data_files, name):
     'invalid_signature.gat', 'invalid_tile_count.gat', 'invalid_tile.gat'
 ))
 def test_open_gat_raises_gat_error(data_files, name):
-    with pytest.raises(InvalidGATError):
+    with pytest.raises(FileParseError):
         open_gat(data_files[name])
 
 
