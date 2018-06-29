@@ -368,7 +368,7 @@ class GRF:
             raise FileNotFoundError(filename)
         opened_file = GRFFile(filename, header, self.stream)
         # open the file based on extension
-        _, extension = os.path.splitext(filename)
+        _, extension = os.path.splitext(filename.lower())
         if extension in FILETYPES:
             return FILETYPES[extension](opened_file)
         return opened_file
