@@ -1,8 +1,9 @@
-from . import grf, gat, spr
+from . import grf, gat, spr, act
 
 
 def open_grf(filename: str) -> grf.GRF:
-    """open a GRF archive
+    """
+    Open a GRF archive
 
     :param filename: the path to the grf archive file
     """
@@ -10,7 +11,8 @@ def open_grf(filename: str) -> grf.GRF:
 
 
 def open_gat(filename: str) -> gat.GAT:
-    """open a GAT file
+    """
+    Open a GAT file
 
     :param filename: the path to the gat file
     """
@@ -18,8 +20,18 @@ def open_gat(filename: str) -> gat.GAT:
 
 
 def open_spr(filename: str) -> spr.SPR:
-    """open a SPR file
+    """
+    Open a SPR file
 
     :param filename: the path to the spr file
     """
     return spr.SPR(open(filename, 'rb'))
+
+
+def open_act(filename: str) -> act.ACT:
+    """
+    Open a ACT file
+
+    :param filename: the path to the act file
+    """
+    return act.ACT(open(filename, 'rb'))

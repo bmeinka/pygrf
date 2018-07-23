@@ -1,8 +1,8 @@
-from .gat import GAT
-from .spr import SPR
+from . import act, gat, spr
 
 
 FILETYPES = {
-    '.gat': GAT,
-    '.spr': SPR
+    '.gat': gat.GAT,
+    '.spr': spr.SPR,
+    '.act': act.ACT
 }
