@@ -15,7 +15,7 @@ List of Goals
 API
 ===
 
-The API isn't complete, but I can start working it out here.
+The API isn't complete, but what is done is documented below.
 
 Entry Points
 ------------
@@ -31,4 +31,4 @@ GRF.open(filename)
 GRF.extract(filename, dest='')
     extract the given file to the given destination directory
 GRF.close()
-    close teh archive
+    close the archive
