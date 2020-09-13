@@ -21,7 +21,8 @@ def parse_header(stream):
     :param stream: the stream of the gat file
     :returns: (width, height)
 
-    The gat header is a simple 14 bytes long. It contains three pieces of information:
+    The gat header is a simple 14 bytes long. It contains three pieces of
+    information:
 
     - a 6-byte signature containing b'GRAT\x01\x02'
     - a 4-byte integer containing the gat width
@@ -63,8 +64,8 @@ def parse_tile(data):
     :param data: the 20-byte data for the tile
     :returns: a Tile
 
-    Each tile is made from 20 bytes of data. The data is as follows, and all values are in
-    little-endian byte order:
+    Each tile is made from 20 bytes of data. The data is as follows, and all
+    values are in little-endian byte order:
 
     ======  ====  =====  ====================
     offset  size  type   purpose
@@ -76,12 +77,14 @@ def parse_tile(data):
     16      4     int    type flag
     ======  ====  =====  ====================
 
-    The heights are all floats. The heights are inverted, so negative numbers result in higher
-    altitude. This is inverted by the parser to make more logical sense.
+    The heights are all floats. The heights are inverted, so negative numbers
+    result in higher altitude. This is inverted by the parser to make more
+    logical sense.
 
-    The type flag determines how the tile interacts with the world. The flag is interpreted
-    differently depending on the height of the tile and the map water level. Tiles that are
-    underwater act differently than tiles that are above water.
+    The type flag determines how the tile interacts with the world. The flag
+    is interpreted differently depending on the height of the tile and the
+    map water level. Tiles that are underwater act differently than tiles
+    that are above water.
 
     Above Water Types
     -----------------

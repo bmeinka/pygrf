@@ -6,7 +6,7 @@ import itertools
 import os
 import struct
 import zlib
-from .filetypes import FILETYPES
+from . import filetypes
 from .exceptions import GRFParseError
 
 
@@ -66,8 +66,8 @@ def parse_header(stream):
 
     :param stream: a byte stream of the grf file
 
-    The header portion of the GRF archive is the first 46 bytes. They are arranged as
-    follows:
+    The header portion of the GRF archive is the first 46 bytes. They are
+    arranged as follows:
 
     ======  ====  =======================================
     offset  size  purpose
@@ -84,8 +84,8 @@ def parse_header(stream):
     Master of Magic
     ===============
 
-    The first 15 bytes of the GRF archive must contain 'Master of Magic'. Any other value
-    is invalid.
+    The first 15 bytes of the GRF archive must contain 'Master of Magic'. Any
+    other value is invalid.
 
     Encryption Flag
     ===============
@@ -95,28 +95,30 @@ def parse_header(stream):
     - 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
     - 00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E
 
-    The first flag denotes a file that does not allow encrypted files within. The second
-    flag denotes a file that does. Any other value found here is invalid.
+    The first flag denotes a file that does not allow encrypted files within.
+    The second flag denotes a file that does. Any other value found here is
+    invalid.
 
     Offset
     ======
 
-    The offset is where the file list is found. The stored value does not include the 46
-    byte header, but the parsed value does.
+    The offset is where the file list is found. The stored value does not
+    include the 46 byte header, but the parsed value does.
 
     File Count
     ==========
 
-    The file count is stored in two different integers. The first one is subtracted from
-    the second, and 7 is taken away to get the total number of files stored in the
-    archive.
+    The file count is stored in two different integers. The first one is
+    subtracted from the second, and 7 is taken away to get the total number
+    of files stored in the archive.
 
     Version
     =======
 
-    The version is stored in two bytes. The first byte represents the major version number
-    and the second byte is the minor version number. The minor version number is ignored
-    by this parser. Currently, the only supported version is `0x0200`.
+    The version is stored in two bytes. The first byte represents the major
+    version number and the second byte is the minor version number. The minor
+    version number is ignored by this parser. Currently, the only supported
+    version is `0x0200`.
     """
     ENCRYPTION_FLAGS = {bytes(range(15)): True, bytes([0] * 15): False}
 
@@ -164,7 +166,8 @@ def parse_file_header(data):
 
     :param header_data: the raw header data to parse
 
-    The file header is made up of 17 bytes of information arranged in the following way:
+    The file header is made up of 17 bytes of information arranged in the
+    following way:
 
     ======  ====  ===============
     offset  size  purpose
@@ -191,8 +194,8 @@ def parse_file_header(data):
     Flags
     =====
 
-    The flag byte stores information about the file and how it is stored within the
-    archive. The flags are:
+    The flag byte stores information about the file and how it is stored
+    within the archive. The flags are:
 
     =====  =================================================
     value  purpose
@@ -205,8 +208,8 @@ def parse_file_header(data):
     Position
     ========
 
-    This is the offset at which the file is stored in the archive. The stored value does
-    not include the 46 byte header. The parsed value does.
+    This is the offset at which the file is stored in the archive. The stored
+    value does not include the 46 byte header. The parsed value does.
     """
     SIZES = slice(0, 12)
     FLAG = 12
@@ -249,8 +252,8 @@ class Index:
     GRF Index
     =========
 
-    The index of the GRF archive is found at the offset in the header. The index has a
-    small header that is arranged as follows:
+    The index of the GRF archive is found at the offset in the header. The
+    index has a small header that is arranged as follows:
 
     ======  ====  ===============
     offset  size  purpose
@@ -259,9 +262,10 @@ class Index:
     4       4     real size
     ======  ====  ===============
 
-    These values are stored as 32-bit little endian integers. After the header begins the
-    actual index data. The data is zlib compressed. Once decompressed, the data is a
-    series of files. Each file is stored in this way:
+    These values are stored as 32-bit little endian integers. After the
+    header begins the actual index data. The data is zlib compressed. Once
+    decompressed, the data is a series of files. Each file is stored in this
+    way:
 
     - a null-terminated C string containing the filename
     - a 17 byte file header
@@ -274,7 +278,7 @@ class Index:
         """
         # decompress the raw file list
         stream.seek(header.index_offset)
-        compressed_length, real_length = struct.unpack('<II', stream.read(8))
+        compressed_length, _ = struct.unpack('<II', stream.read(8))
         self.data = io.BytesIO(zlib.decompress(stream.read(compressed_length)))
 
         # cache the filenames and headers as they are indexed
@@ -290,7 +294,7 @@ class Index:
         while True:
             try:
                 next_file = self.parse_next()
-            except StopIteration:
+            except EOFError:
                 break
             if next_file == filename:
                 return self.indexed[filename]
@@ -302,8 +306,10 @@ class Index:
         """all the filenames in the index"""
         yield from self.indexed
         while True:
-            # self.parse_next will raise StopIteration
-            yield self.parse_next()
+            try:
+                yield self.parse_next()
+            except EOFError:
+                break
 
     def parse_next(self):
         """parse the next filename and store its header"""
@@ -313,8 +319,8 @@ class Index:
         filename = b''.join(read_name)
 
         # if EOF was reached, stop looking for more files
-        if filename == b'':
-            raise StopIteration
+        if filename == b'': # is this the best way to determine EOF?
+            raise EOFError
 
         filename = parse_name(filename)
         header = self.data.read(FILE_HEADER_LENGTH)
@@ -367,11 +373,7 @@ class GRF:
         except KeyError:
             raise FileNotFoundError(filename)
         opened_file = GRFFile(filename, header, self.stream)
-        # open the file based on extension
-        _, extension = os.path.splitext(filename.lower())
-        if extension in FILETYPES:
-            return FILETYPES[extension](opened_file)
-        return opened_file
+        return filetypes.parse(opened_file)
 
     def extract(self, filename, parent_dir=None):
         """extract a file from the archive to the filesystem

@@ -15,10 +15,10 @@ def test_grf_has_correct_length(data_files, name, expected):
     assert length == expected
 
 
-@pytest.mark.parametrize('name, expected', (('a.grf', 0x200), ('ab.grf', 0x200)))
-def test_grf_has_correct_version(data_files, name, expected):
+@pytest.mark.parametrize('name', ('a.grf', 'ab.grf'))
+def test_grf_has_correct_version(data_files, name):
     grf = open_grf(data_files[name])
-    assert grf.version == expected
+    assert grf.version == 0x200
 
 
 @pytest.mark.parametrize('name, expected', (('a.grf', True), ('ab.grf', False)))
@@ -99,9 +99,10 @@ def test_grf_iterator_contains_opened_files(data_files):
 
 
 def test_grf_decodes_filenames(data_files):
-    expected = {line.strip() for line in open(data_files['encoding.txt'])}
+    expected = open(data_files['encoding.txt'], encoding='utf8')
+    expected = {line.strip() for line in expected}
     grf = open_grf(data_files['encoding.grf'])
-    names = {f.filename for f in grf}
+    names = {f.filename.replace('\\', '/') for f in grf}
     assert names == expected
 
 

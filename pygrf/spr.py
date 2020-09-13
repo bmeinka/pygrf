@@ -8,7 +8,11 @@ from .exceptions import FileParseError
 SUPPORTED_VERSIONS = (0x100, 0x101, 0x200, 0x201)
 
 
-Header = collections.namedtuple('Header', ('version', 'pal_count', 'rgb_count'))
+Header = collections.namedtuple('Header', (
+    'version',
+    'pal_count',
+    'rgb_count',
+))
 Color = collections.namedtuple('Color', ('r', 'g', 'b', 'a'))
 
 
@@ -29,12 +33,13 @@ def parse_header(stream):
 
     :param stream: the stream for the file
 
-    The spr header varies in length between 6 and 8 bytes, depending on the version. RGB
-    format image support was added in version 0x200, which adds a count for RGB images to
-    the header (an additional two bytes). The header has the following information:
+    The spr header varies in length between 6 and 8 bytes, depending on the
+    version. RGB format image support was added in version 0x200, which adds
+    a count for RGB images to the header (an additional two bytes). The
+    header has the following information:
 
     - a 2-byte signature containing b'SP'
-    - a 2-byte integer containing the version number (0x100, 0x101, 0x200, 0x201)
+    - a 2-byte integer containing the version number
     - a 2-byte integer containing the palette image count
     - a 2-byte integer containing the RGB image count (version 0x200+)
     """
@@ -54,7 +59,7 @@ def parse_header(stream):
     # get the palette image count
     pal_count, = struct.unpack('<H', stream.read(2))
 
-    # get the rgb image count. If the version is less than 0x200, it must be zero
+    # get the rgb image count. if the version is <0x200, it must be zero
     if version < 0x200:
         rgb_count = 0
     else:
@@ -69,14 +74,17 @@ def parse_palette(stream):
 
     :param stream: the SPR file to parse the palette from
 
-    The last 1024 bytes of a SPR image is its palette. The palette is a series of 256 RGBA
-    colors. The alpha channel is ignored. The first color is the background color, and
-    should be treated as transparent. All other colors are fully opaque (alpha 255).
+    The last 1024 bytes of a SPR image is its palette. The palette is a
+    series of 256 RGBA colors. The alpha channel is ignored. The first color
+    is the background color, and should be treated as transparent. All other
+    colors are fully opaque (alpha 255).
     """
     # the palette is at the end of the file, so seek to it
     stream.seek(-1024, 2)
     def parse_color(i):
-        """ parse a color, making sure only the background color is transparent """
+        """ parse a color
+        ensures only the background is transparent
+        """
         r, g, b, a = struct.unpack('BBBB', stream.read(4))
         a = 255 if i > 0 else 0
         return Color(r, g, b, a)
@@ -90,14 +98,14 @@ def unpack_rle(px):
 
     :param px: the RLE data
 
-    If an index is zero, the next index tells us how many zeroes there should be in a row
-    starting at that position.
+    If an index is zero, the next index tells us how many zeroes there should
+    be in a row starting at that position.
     """
     out = []
     i = 0
     while i < len(px):
         if px[i] == 0:
-            # go to the next pixel and add its value in zeroes to the output data
+            # got o the next pixela nd add its value in zeroes to the output
             i += 1
             out += [0] * px[i]
         else:
@@ -112,9 +120,10 @@ def parse_pal_images(stream):
 
     :param stream: the SPR file to parse PAL images from
 
-    PAL images come in two different formats, depending on the version of the SPR file.
-    Normal PAL images are a simple list of indexes in the color palette. Version 0x201
-    introduced PAL-RLE, which have run-length encoded backgrounds.
+    PAL images come in two different formats, depending on the version of the
+    SPR file. Normal PAL images are a simple list of indexes in the color
+    palette. Version 0x201 introduced PAL-RLE, which have run-length encoded
+    backgrounds.
     """
     # determine if we should be handling run-length encoded images
     rle = False if stream.version < 0x201 else True
@@ -176,8 +185,8 @@ def parse_images(stream):
     - h: the height of the image in pixels
     - px: the array of pixel data
 
-    The pixel data will have boxed rows and flat pixels. The arrangement will look
-    something like this:
+    The pixel data will have boxed rows and flat pixels. The arrangement will
+    look something like this:
 
         ((r, g, b, a, r, g, b, a, r, g, b, a),
          (r, g, b, a, r, g, b, a, r, g, b, a),

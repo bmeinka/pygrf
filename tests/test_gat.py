@@ -43,7 +43,12 @@ def test_gat_data_matches_source_data(data_files, name):
     assert gat.read() == source.read()
 
 
-@pytest.mark.parametrize('x, y, expected', ((0, 0, 0), (1, 0, 1), (1, 1, 1), (2, 2, 2)))
+@pytest.mark.parametrize('x, y, expected', (
+    (0, 0, 0),
+    (1, 0, 1),
+    (1, 1, 1),
+    (2, 2, 2),
+))
 def test_gat_tile_has_correct_type(data_files, x, y, expected):
     gat = open_gat(data_files['a.gat'])
     tile = gat[x, y]
@@ -51,8 +56,9 @@ def test_gat_tile_has_correct_type(data_files, x, y, expected):
 
 
 @pytest.mark.parametrize('x, y, heights', (
-    (0, 0, (0.0, 0.0, 0.0, 0.0)), (1, 1, (40.0, 40.0, 40.0, 40.0)),
-    (2, 2, (0.0, 10.0, 20.0, 30.0))
+    (0, 0, (0.0, 0.0, 0.0, 0.0)),
+    (1, 1, (40.0, 40.0, 40.0, 40.0)),
+    (2, 2, (0.0, 10.0, 20.0, 30.0)),
 ))
 def test_gat_tile_has_correct_heights(data_files, x, y, heights):
     gat = open_gat(data_files['a.gat'])
@@ -64,7 +70,11 @@ def test_gat_tile_has_correct_heights(data_files, x, y, heights):
     assert tile.top_right == top_right
 
 
-@pytest.mark.parametrize('x, y, altitude', ((0, 0, 0.0), (1, 1, 40.0), (2, 2, 15.0)))
+@pytest.mark.parametrize('x, y, altitude', (
+    (0, 0, 0.0),
+    (1, 1, 40.0),
+    (2, 2, 15.0),
+))
 def test_gat_tile_has_correct_altitude(data_files, x, y, altitude):
     gat = open_gat(data_files['a.gat'])
     tile = gat[x, y]

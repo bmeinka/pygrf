@@ -15,13 +15,11 @@ class Sprite:
         # get the things that exist for every sprite from file
         self.x, self.y, self.index, self.flags = x, y, index, flags
 
-        # set the defaults to be used before the feature is supported in the parsed
-        # version. these will be altered afterward when the values are parsed
+        # set the default values
         self.color = (255, 255, 255, 255)
         self.zoom = (1.0, 1.0)
         self.angle = 0.0
         self.type = 'pal'
-        # before 0x205, we don't know the width and height, so they are set to None
         self.size = None
 
     @property
@@ -49,10 +47,10 @@ def parse_sprite(stream):
         out.color = struct.unpack('BBBB', stream.read(4))
 
     # 0x200 added zoom
-    # zoom is a float in version 0x200 to 0x203, and split between x and y in 0x204+
     if stream.version >= 0x200 and stream.version <= 0x203:
         zoom, = struct.unpack('<f', stream.read(4))
         out.zoom = (zoom, zoom)
+    # 0x204 allows different zooms for x and y axes
     elif stream.version >= 0x204:
         out.zoom = struct.unpack('<ff', stream.read(8))
 
@@ -128,8 +126,9 @@ def parse_actions(stream):
 
     :param stream: the act file to parse
 
-    The header of the action list starts with a uint16 containing the action count. After
-    that is a 10-byte piece of data. I have no idea what it does or what it is for.
+    The header of the action list starts with a uint16 containing the action
+    count. After that is a 10-byte piece of data. I have no idea what it does
+    or what it is for.
     """
     stream.seek(4)
     count, = struct.unpack('<H', stream.read(2))
@@ -139,8 +138,9 @@ def parse_actions(stream):
 
     def parse_action():
         """
-        An action is really just a list of animations. The action starts with a 32-bit
-        integer count of animations followed by a list of animations.
+        An action is really just a list of animations. The action starts with
+        a 32-bit integer count of animations followed by a list of
+        animations.
         """
         frame_count, = struct.unpack('<i', stream.read(4))
         frames = tuple(parse_frame(stream) for _ in range(frame_count))
