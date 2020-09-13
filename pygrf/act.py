@@ -24,6 +24,19 @@ class Sprite:
         # before 0x205, we don't know the width and height, so they are set to None
         self.size = None
 
+    @property
+    def flipped(self):
+        return self.flags & 1 == 1
+
+    def __eq__(self, other):
+        return (self.index == other.index and
+                self.x == other.x and self.y == other.y and
+                self.flags == other.flags and
+                self.color == other.color and
+                self.zoom == other.zoom and
+                self.angle == other.angle and
+                self.size == other.size)
+
 
 def parse_sprite(stream):
     """
@@ -69,6 +82,9 @@ class Frame:
         self.event_id = -1
         self.attach_points = tuple()
 
+    def __eq__(self, other):
+        return self.sprites == other.sprites
+
 
 def parse_frame(stream):
     """
@@ -101,6 +117,10 @@ class Action:
     def __init__(self, frames):
         self.frames = frames
         self.delay = 4.0
+
+    def __eq__(self, other):
+        return (self.frames == other.frames and
+                self.delay == other.delay)
 
 def parse_actions(stream):
     """

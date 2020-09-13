@@ -10,7 +10,17 @@ SUPPORTED_VERSIONS = (0x100, 0x101, 0x200, 0x201)
 
 Header = collections.namedtuple('Header', ('version', 'pal_count', 'rgb_count'))
 Color = collections.namedtuple('Color', ('r', 'g', 'b', 'a'))
-Image = collections.namedtuple('Image', ('w', 'h', 'px'))
+
+
+class Image:
+
+    def __init__(self, w, h, px):
+        self.w, self.h, self.px = w, h, px
+
+    @property
+    def bytes(self):
+        """ the raw bytes data for this images pixels """
+        return bytes(itertools.chain.from_iterable(self.px))
 
 
 def parse_header(stream):
