@@ -1,187 +1,184 @@
-import collections
 import contextlib
 import io
 import struct
-from .exceptions import FileParseError
+from collections import namedtuple
+from typing import NamedTuple, Tuple
+#from .exceptions import FileParseError 
 from .util import get_version
+from .graphics import Point, Color, Vector2
 
 
-SUPPORTED_VERSIONS = (0x200, 0x201, 0x202, 0x203, 0x204, 0x205)
+class Layer(NamedTuple):
+    offset: Point
+    index: int
+    flipped: bool
+    color: Color = Color(255, 255, 255, 255)
+    zoom: Vector2 = Vector2(1.0, 1.0)
+    angle: float = 0.0
 
 
-class Sprite:
-
-    def __init__(self, x, y, index, flags):
-        # get the things that exist for every sprite from file
-        self.x, self.y, self.index, self.flags = x, y, index, flags
-
-        # set the default values
-        self.color = (255, 255, 255, 255)
-        self.zoom = (1.0, 1.0)
-        self.angle = 0.0
-        self.type = 'pal'
-        self.size = None
-
-    @property
-    def flipped(self):
-        return self.flags & 1 == 1
-
-    def __eq__(self, other):
-        return (self.index == other.index and
-                self.x == other.x and self.y == other.y and
-                self.flags == other.flags and
-                self.color == other.color and
-                self.zoom == other.zoom and
-                self.angle == other.angle and
-                self.size == other.size)
+class Frame(NamedTuple):
+    layers: Tuple[Layer]
+    trigger: int = -1
 
 
-def parse_sprite(stream):
-    """
-    """
-    # get the x, y offsets, the spr index and rendering flags
-    out = Sprite(*struct.unpack('<4i', stream.read(16)))
+class Animation(NamedTuple):
+    frames: Tuple[Frame]
+    interval: float = 4.0
 
-    # 0x200 added color
+
+def parse_layer(stream):
+    """ Parse a layer of a frame of an animation in an ACT file.
+
+    :param stream: the act file to parse from
+
+    Each layer consists of the following information:
+
+    ======  ====  ======  =======  ============================
+    field   size  type    version  purpose
+    ======  ====  ======  =======  ============================
+    offset  8     int32   0x100    offset from center of frame
+    index   4     uint32  0x100    image index in spr file
+    flags   4     uint32  0x100    image is flipped if non-zero
+    color   4     byte    0x200    ABGR? color for tinting
+    zoom    4     float   0x200    image scale
+    zoom y  4     float   0x204    image scale for y axis
+    angle   4     float   0x200    rotation of the image
+    unused  4     int32   0x200
+    unused  8     int32   0x205
+    ======  ====  ======  =======  ============================
+    """ 
+    x, y, index, flags = struct.unpack('<iiII', stream.read(16))
+    offset = Point(x, y)
+    layer = Layer(offset, index, flags != 0)
+
     if stream.version >= 0x200:
-        out.color = struct.unpack('BBBB', stream.read(4))
+        color = Color(*struct.unpack('<4B', stream.read(4)))
+        layer = layer._replace(color=color)
 
-    # 0x200 added zoom
-    if stream.version >= 0x200 and stream.version <= 0x203:
+    if stream.version >= 0x204:
+        zoom = Vector2(*struct.unpack('<ff', stream.read(8)))
+        layer = layer._replace(zoom=zoom)
+    elif stream.version >= 0x200:
         zoom, = struct.unpack('<f', stream.read(4))
-        out.zoom = (zoom, zoom)
-    # 0x204 allows different zooms for x and y axes
-    elif stream.version >= 0x204:
-        out.zoom = struct.unpack('<ff', stream.read(8))
+        layer = layer._replace(zoom=Vector2(zoom, zoom))
 
-    # 0x200 added rotation
     if stream.version >= 0x200:
-        out.angle, = struct.unpack('<f', stream.read(4))
+        angle, = struct.unpack('<f', stream.read(4))
+        layer = layer._replace(angle=angle)
 
-    # 0x200 added image type (rgb or pal)
-    if stream.version >= 0x200:
-        image_type, = struct.unpack('<i', stream.read(4))
-        if image_type:
-            out.type = 'rgb'
-
-    # 0x205 added width and height (I don't see the point?)
     if stream.version >= 0x205:
-        out.size = struct.unpack('<ii', stream.read(8))
+        stream.read(12)
+    elif stream.version >= 0x200:
+        stream.read(4)
 
-    return out
-
-
-class Frame:
-
-    def __init__(self, range1, range2, sprites):
-        self.range1, self.range2, self.sprites  = range1, range2, sprites
-
-        # set the defaults
-        self.event_id = -1
-        self.attach_points = tuple()
-
-    def __eq__(self, other):
-        return self.sprites == other.sprites
+    return layer
 
 
 def parse_frame(stream):
+    """ Parse a frame from an ACT file.
+
+    :param stream: the act file to parse from
+
+    A frame is structured as follows:
+
+    =============  =====  =======  ===================================
+    field          type   version  type   purpose
+    =============  =====  =======  ===================================
+    unused                         32 bytes of "range rects"
+    layer count    int32  0x100    the number of layers in the frame
+    layers         list   0x100    the layers of the frame
+    trigger        int32  0x200    a trigger id, or -1 for none
+    anchor count   int32  0x203    the number of anchors for the frame
+    anchors        list   0x203    the anchors for the frame
+    =============  =====  =======  ===================================
     """
-    """
-    # get the ranges (don't know what they are for yet)
-    ranges = struct.unpack('<8i', stream.read(32))
-    range1, range2 = ranges[:4], ranges[4:]
-
-    # get the sprite count (no idea why it wouldn't be one
-    sprite_count, = struct.unpack('<i', stream.read(4))
-    sprites = tuple(parse_sprite(stream) for _ in range(sprite_count))
-
-    out = Frame(range1, range2, sprites)
-
-    # get the event id (default is -1)
+    layer_count, = struct.unpack('<32xi', stream.read(36))
+    layers = tuple(parse_layer(stream) for _ in range(layer_count))
     if stream.version >= 0x200:
-        out.event_id, = struct.unpack('<i', stream.read(4))
-
-    # get the attach points
+        trigger, = struct.unpack('<i', stream.read(4))
+    else:
+        trigger = -1
+    # don't know how to use anchor data, so skip it
     if stream.version >= 0x203:
-        ap_count, = struct.unpack('<i', stream.read(4))
-        out.attach_points = tuple(struct.unpack('<4i', stream.read(16))
-                                  for _ in range(ap_count))
-
-    return out
+        count, = struct.unpack('<i', stream.read(4))
+        stream.read(16 * count)
+    return Frame(layers, trigger)
 
 
-class Action:
+def parse_animation(stream):
+    """ Parse an animation from an ACT file.
 
-    def __init__(self, frames):
-        self.frames = frames
-        self.delay = 4.0
+    :param stream: the act file to parse from
 
-    def __eq__(self, other):
-        return (self.frames == other.frames and
-                self.delay == other.delay)
-
-def parse_actions(stream):
+    An animation is made up of a single int32 containing the number of frames
+    followed by a list of frames. An animation starts with a default interval
+    of 4.0, which will be modified later by the list of animation intervals
+    at the end of the act file.
     """
-    Parse the list of actions in the ACT file
+    frame_count, = struct.unpack('<i', stream.read(4))
+    frames = (parse_frame(stream) for _ in range(frame_count))
+    return Animation(tuple(frames), 4.0)
 
-    :param stream: the act file to parse
+def parse_triggers(stream):
+    """ Parse the triggers defined in an act file.
 
-    The header of the action list starts with a uint16 containing the action
-    count. After that is a 10-byte piece of data. I have no idea what it does
-    or what it is for.
+    :param stream: the act file to parse from
+
+    The triggers are stored in a list in the act file after the animations.
+    It starts with an int32 holding the trigger count. After that is a list
+    of trigger strings. Each string is held in a 40-byte buffer and
+    null-terminated.
     """
-    stream.seek(4)
-    count, = struct.unpack('<H', stream.read(2))
-
-    # skip ten bytes
-    stream.read(10)
-
-    def parse_action():
-        """
-        An action is really just a list of animations. The action starts with
-        a 32-bit integer count of animations followed by a list of
-        animations.
-        """
-        frame_count, = struct.unpack('<i', stream.read(4))
-        frames = tuple(parse_frame(stream) for _ in range(frame_count))
-        return Action(frames)
-
-    return tuple(parse_action() for _ in range(count))
-
-
-def parse_events(stream):
-
     count, = struct.unpack('<i', stream.read(4))
-
-    # parse each 40 character event name as a string.
-    def parse_event_name():
-        name = stream.read(40)
-        end = 40
-        with contextlib.suppress(ValueError):
-            end = name.index(0)
-        return name[:end].decode()
-
-    return tuple(parse_event_name() for _ in range(count))
+    return tuple(stream.read(40).strip(b'\x00').decode() for _ in range(count))
 
 
-def parse_delays(stream):
-    for action in stream.actions:
-        action.delay, = struct.unpack('<f', stream.read(4))
+def parse_intervals(stream):
+    """ Parse animation intervals for a stream
+
+    :param stream: the act file to read from
+
+    The animation delays are stored at the end of the file in a simple list.
+    """
+    intervals = struct.iter_unpack('<f', stream.read())
+    stream.animations = tuple(
+        animation._replace(interval=interval[0])
+        for animation, interval in zip(stream.animations, intervals)
+    )
 
 
 class ACT(io.BytesIO):
 
     def __init__(self, stream):
+        """ Parse an ACT file.
+
+        :param stream: the source binary stream
+
+        An act file begins with a simple header arranged in the following
+        manner:
+
+        =========  ====  ======  ====================
+        field      size  type    purpose
+        =========  ====  ======  ====================
+        signature  2     char    verify the file type
+        version    2     uint16  the version number
+        count      2     uint16  number of animations
+        unused     10
+        =========  ====  ======  ====================
+
+        After the header, the rest of the file contains the following
+        information in this order:
+
+        - list of animations
+        - list of sound files/events
+        - list of intervals for each animation
+        """
         stream.seek(0)
         super().__init__(stream.read())
 
-        self.version = get_version(self, b'AC', supported=SUPPORTED_VERSIONS)
-
-        self.actions = parse_actions(self)
-
-        self.events = tuple()
-        if self.version >= 0x201:
-            self.events = parse_events(self)
-
-        if self.version >= 0x202:
-            parse_delays(self)
+        self.version = get_version(self, b'AC')
+        count, = struct.unpack('<H10x', self.read(12))
+        self.animations = tuple(parse_animation(self) for _ in range(count))
+        self.triggers = parse_triggers(self)
+        parse_intervals(self)
