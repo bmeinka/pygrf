@@ -25,7 +25,8 @@ def open_spr(filename: str) -> spr.SPR:
 
     :param filename: the path to the spr file
     """
-    return spr.SPR(open(filename, 'rb'))
+    with open(filename, 'rb') as f:
+        return spr.SPR(f.read())
 
 
 def open_act(filename: str) -> act.ACT:
