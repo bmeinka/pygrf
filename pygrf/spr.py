@@ -1,15 +1,13 @@
 """ spr file parsing """
 import struct
 from typing import Tuple, Sequence
-from collections import namedtuple
 from itertools import chain
 from .exceptions import FileParseError
 from .graphics import Image, Color
+from .filetypes import parse_header, Header
 
 
 color_struct = struct.Struct('<3Bx')
-header_struct = struct.Struct('<2sH')
-Header = namedtuple('Header', 'signature version')
 
 
 class SprParser:
@@ -17,8 +15,9 @@ class SprParser:
 
     count_struct = struct.Struct('')
 
-    def __init__(self, data: bytes):
+    def __init__(self, header: Header, data: bytes):
         """ create a new spr parser that parses the given data """
+        self.header = header
         self.data = data
         self.palette = None
 
@@ -40,7 +39,7 @@ class SprParser:
     @property
     def offset(self):
         """ the position in data where the images begin """
-        return header_struct.size + self.count_struct.size
+        return self.header.size + self.count_struct.size
 
     def parse_count(self) -> Tuple[int, int]:
         """ parse the counts from file """
@@ -76,7 +75,7 @@ class SprParser:
     def rgb_offset(self, index) -> int:
         """ get the offset of an rgb image
 
-        index does *NOT* include the pal images. index 0 is the first rgb image.
+        index does *NOT* include the pal images. index 0 is the first rgb image
         """
         offset = self.pal_offset(self.pal_count)
         for _ in range(index):
@@ -93,7 +92,7 @@ class SprParser:
         """ get an image """
         pal = self.pal_count
         if index < pal and self.get_palette() is None:
-            raise FileParseError('unable to parse pal images without a palette')
+            raise FileParseError('unable to parse pal images with no palette')
         if index < pal:
             return self.parse_pal(self.pal_offset(index))
         index -= pal
@@ -107,7 +106,7 @@ class Spr100(SprParser):
     pal_struct = struct.Struct('<2H')
 
     def parse_count(self):
-        count, = self.count_struct.unpack_from(self.data, header_struct.size)
+        count, = self.count_struct.unpack_from(self.data, self.header.size)
         return (count, 0)
 
     def parse_palette(self):
@@ -126,10 +125,10 @@ class Spr100(SprParser):
         return Image(width, height, pixels)
 
     def rgb_size(self, offset):
-        raise FileParseError('this version of the format contains no rgb images')
+        raise FileParseError('rgb images unsupported')
 
     def parse_rgb(self, offset):
-        raise FileParseError('this version of the format contains no rgb images')
+        raise FileParseError('rgb images unsupported')
 
 
 class Spr101(Spr100):
@@ -150,7 +149,7 @@ class Spr200(Spr101):
     rgb_struct = struct.Struct('<2H')
 
     def parse_count(self):
-        return self.count_struct.unpack_from(self.data, header_struct.size)
+        return self.count_struct.unpack_from(self.data, self.header.size)
 
     def rgb_size(self, offset):
         width, height = self.rgb_struct.unpack_from(self.data, offset)
@@ -199,8 +198,8 @@ class SPR:
     """ a container for sprite images """
 
     def __init__(self, data: bytes):
-        self.header = _parse_header(data)
-        self.parser = _get_parser(data, self.header.version)
+        self.header = parse_header(data, b'SP')
+        self.parser = _get_parser(data, self.header)
 
     def __len__(self) -> int:
         return self.parser.count
@@ -222,7 +221,7 @@ class SPR:
         return self.header.version
 
 
-def _get_parser(data: bytes, version: int) -> SprParser:
+def _get_parser(data: bytes, header: Header) -> SprParser:
     """ get the appropriate parser object based on the file version """
     parsers = {
         0x100: Spr100,
@@ -230,22 +229,9 @@ def _get_parser(data: bytes, version: int) -> SprParser:
         0x200: Spr200,
         0x201: Spr201,
     }
-    if version not in parsers:
+    if header.version not in parsers:
         raise FileParseError('unsupported version')
-    return parsers[version](data)
-
-
-def _parse_header(data: bytes) -> Header:
-    """ parse the header found at the beginning of a SPR file. """
-    # the SPR header has the following layout:
-    # - a 2-byte signature which must contain `b'SP'`
-    # - a 2-byte version number
-    if not data.startswith(b'SP'):
-        raise FileParseError('invalid header signature')
-    try:
-        return Header(*header_struct.unpack_from(data))
-    except struct.error as err:
-        raise FileParseError('invalid header length') from err
+    return parsers[header.version](header, data)
 
 
 def _unpack_rle(data: bytes) -> bytes:
